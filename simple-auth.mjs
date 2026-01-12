@@ -14,7 +14,7 @@ const config = {
 };
 
 const pca = new ConfidentialClientApplication(config);
-const scopes = ['Tasks.Read', 'Tasks.ReadWrite', 'User.Read', 'offline_access'];
+const scopes = ['Tasks.Read', 'Calendars.Read', 'User.Read', 'offline_access'];
 
 // Generate auth URL
 const authUrl = await pca.getAuthCodeUrl({

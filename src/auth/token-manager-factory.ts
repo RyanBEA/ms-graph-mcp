@@ -1,16 +1,13 @@
 import { ITokenManager } from './types.js';
-import { FileTokenManager } from './file-token-manager.js';
+import { MsalTokenManager } from './msal-token-manager.js';
 import { logger } from '../security/logger.js';
 
 let tokenManagerInstance: ITokenManager | null = null;
 
 /**
- * Get or create a singleton token manager instance
- * Automatically selects token storage based on configuration:
- * - file: Simple JSON file storage (default, simplest)
- * - msal: MSAL's built-in cache (most reliable for production)
- * - keytar: Windows Credential Manager (may have size limits)
- * - 1password: 1Password SDK (requires service account)
+ * Get or create a singleton token manager instance.
+ * Uses MsalTokenManager which leverages MSAL's built-in cache
+ * and acquireTokenSilent for automatic token refresh.
  *
  * @returns Configured token manager instance
  */
@@ -19,9 +16,8 @@ export async function getTokenManager(): Promise<ITokenManager> {
     return tokenManagerInstance;
   }
 
-  // HARDCODED: Always use file storage for simplicity
-  logger.info('Using file-based token storage (hardcoded)');
-  tokenManagerInstance = new FileTokenManager();
+  logger.info('Using MSAL token storage');
+  tokenManagerInstance = new MsalTokenManager();
 
   return tokenManagerInstance;
 }

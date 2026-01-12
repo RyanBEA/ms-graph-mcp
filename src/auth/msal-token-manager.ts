@@ -1,12 +1,18 @@
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { promises as fs } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ITokenManager, TokenSet } from './types.js';
 import { TokenStorageError } from '../security/errors.js';
 import { logger } from '../security/logger.js';
 import { getConfiguration } from '../config/environment.js';
 
-const CACHE_FILE = process.env.MSAL_CACHE_FILE || './.msal-cache.json';
-const ACCOUNT_FILE = process.env.MSAL_ACCOUNT_FILE || './.msal-account.json';
+// Get the directory where this module is located, then go up to project root
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+
+const CACHE_FILE = process.env.MSAL_CACHE_FILE || path.join(PROJECT_ROOT, '.msal-cache.json');
+const ACCOUNT_FILE = process.env.MSAL_ACCOUNT_FILE || path.join(PROJECT_ROOT, '.msal-account.json');
 
 /**
  * Token manager using MSAL's built-in cache with file persistence.
@@ -16,6 +22,7 @@ const ACCOUNT_FILE = process.env.MSAL_ACCOUNT_FILE || './.msal-account.json';
 export class MsalTokenManager implements ITokenManager {
   private msalClient: ConfidentialClientApplication;
   private accountId: string | null = null;
+  private cacheLoaded: boolean = false;
 
   constructor() {
     const config = getConfiguration();
@@ -27,9 +34,16 @@ export class MsalTokenManager implements ITokenManager {
         clientSecret: config.AZURE_CLIENT_SECRET,
       },
     });
+  }
 
-    // Load cache from file on initialization
-    this.loadCache();
+  /**
+   * Ensure cache is loaded before operations
+   */
+  private async ensureCacheLoaded(): Promise<void> {
+    if (!this.cacheLoaded) {
+      await this.loadCache();
+      this.cacheLoaded = true;
+    }
   }
 
   /**
@@ -91,6 +105,9 @@ export class MsalTokenManager implements ITokenManager {
    */
   async getTokens(): Promise<TokenSet> {
     try {
+      // Ensure cache is loaded first
+      await this.ensureCacheLoaded();
+
       // Load account ID from file if not in memory
       if (!this.accountId) {
         try {
@@ -118,7 +135,7 @@ export class MsalTokenManager implements ITokenManager {
       // Use MSAL's acquireTokenSilent to get a fresh token
       const response = await this.msalClient.acquireTokenSilent({
         account,
-        scopes: ['Tasks.Read', 'User.Read', 'offline_access'],
+        scopes: ['Tasks.Read', 'Calendars.Read', 'User.Read', 'offline_access'],
       });
 
       if (!response || !response.accessToken) {
@@ -142,6 +159,7 @@ export class MsalTokenManager implements ITokenManager {
    */
   async hasValidTokens(): Promise<boolean> {
     try {
+      await this.ensureCacheLoaded();
       const tokens = await this.getTokens();
       return tokens.expiresAt > Date.now();
     } catch {
