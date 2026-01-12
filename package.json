@@ -1,0 +1,53 @@
+{
+  "name": "ms-graph-mcp",
+  "version": "1.0.0",
+  "description": "Secure MCP server for Microsoft Graph API (Calendar, To Do) with Claude Code",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "auth": "node dist/scripts/authenticate.js",
+    "test": "vitest",
+    "test:security": "vitest run tests/security",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/**/*.ts",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "microsoft-graph",
+    "microsoft-todo",
+    "outlook-calendar",
+    "claude",
+    "ai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@1password/sdk": "^0.4.0-beta.1",
+    "@azure/msal-node": "^3.8.2",
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "dotenv": "^17.2.3",
+    "keytar": "^7.9.0",
+    "winston": "^3.18.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "@vitest/coverage-v8": "^4.0.10",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10"
+  }
+}
