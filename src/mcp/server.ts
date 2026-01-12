@@ -13,17 +13,21 @@ import {
 import { randomUUID } from 'crypto';
 
 import { logger } from '../security/logger.js';
-import { sanitizeError, sanitizeTasks, sanitizeTaskLists, sanitizeTask } from '../security/sanitizers.js';
+import { sanitizeError, sanitizeTasks, sanitizeTaskLists, sanitizeTask, sanitizeCalendarEvents } from '../security/sanitizers.js';
 import { ToDoService } from '../graph/todo-service.js';
+import { CalendarService } from '../graph/calendar-service.js';
 import { SecureGraphClient } from '../graph/client.js';
 import { TokenRefresher } from '../auth/token-refresher.js';
 import { getTokenManager } from '../auth/token-manager-factory.js';
+import { validateDateString, validateDateRange } from '../security/validators.js';
 import {
   GetAuthStatusSchema,
   ListTaskListsSchema,
   ListTasksSchema,
   GetTaskSchema,
   SearchTasksSchema,
+  ListCalendarEventsSchema,
+  GetCalendarViewSchema,
   RequestContext,
   AuthStatus,
 } from './types.js';
@@ -34,12 +38,14 @@ import {
 export class MsGraphMCPServer {
   private server: Server;
   private todoService: ToDoService;
+  private calendarService: CalendarService;
   private tokenRefresher: TokenRefresher;
 
-  private constructor(todoService: ToDoService, tokenRefresher: TokenRefresher) {
+  private constructor(todoService: ToDoService, calendarService: CalendarService, tokenRefresher: TokenRefresher) {
     logger.info('Initializing MsGraph MCP Server');
 
     this.todoService = todoService;
+    this.calendarService = calendarService;
     this.tokenRefresher = tokenRefresher;
 
     // Initialize server
@@ -70,8 +76,9 @@ export class MsGraphMCPServer {
     const tokenRefresher = new TokenRefresher(tokenManager);
     const graphClient = new SecureGraphClient(tokenRefresher);
     const todoService = new ToDoService(graphClient);
+    const calendarService = new CalendarService(graphClient);
 
-    return new MsGraphMCPServer(todoService, tokenRefresher);
+    return new MsGraphMCPServer(todoService, calendarService, tokenRefresher);
   }
 
   /**
@@ -207,6 +214,51 @@ export class MsGraphMCPServer {
           required: ['query'],
         },
       },
+      // Calendar tools
+      {
+        name: 'list_calendar_events',
+        description: 'Get calendar events with optional time range filter. Defaults to today.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            filter: {
+              type: 'string',
+              enum: ['today', 'this-week', 'this-month'],
+              description: 'Filter events by time range (default: today)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of events to return (1-100)',
+              minimum: 1,
+              maximum: 100,
+            },
+          },
+        },
+      },
+      {
+        name: 'get_calendar_view',
+        description: 'Get calendar events in a custom date range.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            startDate: {
+              type: 'string',
+              description: 'Start date in ISO format (e.g., 2025-01-15)',
+            },
+            endDate: {
+              type: 'string',
+              description: 'End date in ISO format (e.g., 2025-01-20)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number of events to return (1-100)',
+              minimum: 1,
+              maximum: 100,
+            },
+          },
+          required: ['startDate', 'endDate'],
+        },
+      },
     ];
   }
 
@@ -229,6 +281,13 @@ export class MsGraphMCPServer {
 
       case 'search_tasks':
         return this.handleSearchTasks(args);
+
+      // Calendar tools
+      case 'list_calendar_events':
+        return this.handleListCalendarEvents(args);
+
+      case 'get_calendar_view':
+        return this.handleGetCalendarView(args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);
@@ -388,6 +447,83 @@ export class MsGraphMCPServer {
     });
 
     const sanitized = sanitizeTasks(tasks);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(sanitized, null, 2),
+        },
+      ],
+    };
+  }
+
+  // ============================================
+  // Calendar tool handlers
+  // ============================================
+
+  /**
+   * Handle list_calendar_events tool.
+   */
+  private async handleListCalendarEvents(args: unknown) {
+    const validated = ListCalendarEventsSchema.parse(args);
+
+    let events;
+    const limit = validated.limit ?? 50;
+
+    // Apply filter
+    switch (validated.filter) {
+      case 'this-week':
+        events = await this.calendarService.getEventsThisWeek();
+        break;
+
+      case 'this-month':
+        events = await this.calendarService.getEventsThisMonth();
+        break;
+
+      case 'today':
+      default:
+        events = await this.calendarService.getEventsToday();
+        break;
+    }
+
+    // Apply limit
+    events = events.slice(0, limit);
+
+    const sanitized = sanitizeCalendarEvents(events);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(sanitized, null, 2),
+        },
+      ],
+    };
+  }
+
+  /**
+   * Handle get_calendar_view tool.
+   */
+  private async handleGetCalendarView(args: unknown) {
+    const validated = GetCalendarViewSchema.parse(args);
+
+    // Validate and parse dates
+    const startDate = validateDateString(validated.startDate, 'startDate');
+    const endDate = validateDateString(validated.endDate, 'endDate');
+
+    // Validate the date range
+    validateDateRange(startDate, endDate);
+
+    const limit = validated.limit ?? 100;
+
+    // Get events in the date range
+    let events = await this.calendarService.getCalendarView(startDate, endDate);
+
+    // Apply limit
+    events = events.slice(0, limit);
+
+    const sanitized = sanitizeCalendarEvents(events);
 
     return {
       content: [

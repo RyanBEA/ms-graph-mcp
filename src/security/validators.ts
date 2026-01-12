@@ -220,3 +220,88 @@ export function validateSearchQuery(query: string): void {
     length: trimmedQuery.length,
   });
 }
+
+// ============================================
+// Calendar validators
+// ============================================
+
+/**
+ * Validate date string format.
+ * Accepts ISO 8601 date format (YYYY-MM-DD or full ISO datetime).
+ *
+ * @param dateStr - Date string to validate
+ * @param fieldName - Name of the field for error messages
+ * @throws {ValidationError} If date format is invalid
+ */
+export function validateDateString(dateStr: string, fieldName: string): Date {
+  if (!dateStr || typeof dateStr !== 'string') {
+    throw new ValidationError(`${fieldName} is required`);
+  }
+
+  const trimmed = dateStr.trim();
+
+  // Check for null bytes
+  if (trimmed.includes('\x00')) {
+    logger.warn('Null byte detected in date string');
+    throw new ValidationError(`${fieldName} contains null bytes`);
+  }
+
+  // Try to parse the date
+  const date = new Date(trimmed);
+
+  if (isNaN(date.getTime())) {
+    logger.warn('Invalid date format', {
+      fieldName,
+      providedLength: trimmed.length,
+    });
+    throw new ValidationError(`${fieldName} is not a valid date format. Use ISO format (e.g., 2025-01-15)`);
+  }
+
+  // Reasonable date range check (not too far in past or future)
+  const now = new Date();
+  const minDate = new Date();
+  minDate.setFullYear(now.getFullYear() - 5); // 5 years in the past
+  const maxDate = new Date();
+  maxDate.setFullYear(now.getFullYear() + 5); // 5 years in the future
+
+  if (date < minDate || date > maxDate) {
+    logger.warn('Date out of reasonable range', {
+      fieldName,
+      date: date.toISOString(),
+    });
+    throw new ValidationError(`${fieldName} must be within 5 years of today`);
+  }
+
+  logger.debug('Date validated', {
+    fieldName,
+    date: date.toISOString(),
+  });
+
+  return date;
+}
+
+/**
+ * Validate a date range for calendar queries.
+ *
+ * @param startDate - Start date
+ * @param endDate - End date
+ * @throws {ValidationError} If date range is invalid
+ */
+export function validateDateRange(startDate: Date, endDate: Date): void {
+  if (endDate <= startDate) {
+    throw new ValidationError('End date must be after start date');
+  }
+
+  // Max range of 365 days
+  const daysDiff = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysDiff > 365) {
+    logger.warn('Date range too large', { daysDiff });
+    throw new ValidationError('Date range cannot exceed 365 days');
+  }
+
+  logger.debug('Date range validated', {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    daysDiff,
+  });
+}

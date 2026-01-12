@@ -4,7 +4,8 @@
  */
 
 import { ToDoTask, ToDoTaskList } from '../graph/todo-service.js';
-import { SanitizedTask, SanitizedTaskList } from '../mcp/types.js';
+import { CalendarEvent } from '../graph/calendar-service.js';
+import { SanitizedTask, SanitizedTaskList, SanitizedCalendarEvent } from '../mcp/types.js';
 import { logger } from './logger.js';
 
 /**
@@ -98,4 +99,50 @@ export function sanitizeError(error: unknown): { error: string; code?: string } 
   return {
     error: 'An unexpected error occurred',
   };
+}
+
+// ============================================
+// Calendar sanitizers
+// ============================================
+
+/**
+ * Sanitize a single calendar event for client consumption.
+ * Removes internal Microsoft Graph fields and sensitive data.
+ *
+ * @param event - Raw event from Microsoft Graph API
+ * @returns Sanitized event safe for client
+ */
+export function sanitizeCalendarEvent(event: CalendarEvent): SanitizedCalendarEvent {
+  return {
+    id: event.id,
+    subject: event.subject,
+    start: event.start.dateTime,
+    end: event.end.dateTime,
+    startTimeZone: event.start.timeZone,
+    endTimeZone: event.end.timeZone,
+    location: event.location?.displayName,
+    organizer: event.organizer ? {
+      name: event.organizer.emailAddress.name,
+      email: event.organizer.emailAddress.address,
+    } : undefined,
+    attendees: event.attendees?.map(a => ({
+      name: a.emailAddress.name,
+      email: a.emailAddress.address,
+      type: a.type,
+      response: a.status?.response,
+    })),
+    isAllDay: event.isAllDay,
+    webLink: event.webLink,
+  };
+}
+
+/**
+ * Sanitize multiple calendar events.
+ *
+ * @param events - Array of raw events
+ * @returns Array of sanitized events
+ */
+export function sanitizeCalendarEvents(events: CalendarEvent[]): SanitizedCalendarEvent[] {
+  logger.debug('Sanitizing calendar events', { count: events.length });
+  return events.map(sanitizeCalendarEvent);
 }

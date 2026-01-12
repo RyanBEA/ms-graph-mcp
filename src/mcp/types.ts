@@ -95,3 +95,56 @@ export interface RequestContext {
   tool: string;
   timestamp: number;
 }
+
+// ============================================
+// Calendar schemas and types
+// ============================================
+
+/**
+ * Schema for list_calendar_events tool.
+ */
+export const ListCalendarEventsSchema = z.object({
+  filter: z.enum(['today', 'this-week', 'this-month'])
+    .optional()
+    .default('today')
+    .describe('Filter events by time range (default: today)'),
+  limit: z.number().int().min(1).max(100).optional().describe('Maximum number of events to return (1-100)'),
+});
+
+export type ListCalendarEventsInput = z.infer<typeof ListCalendarEventsSchema>;
+
+/**
+ * Schema for get_calendar_view tool.
+ */
+export const GetCalendarViewSchema = z.object({
+  startDate: z.string().describe('Start date in ISO format (e.g., 2025-01-15)'),
+  endDate: z.string().describe('End date in ISO format (e.g., 2025-01-20)'),
+  limit: z.number().int().min(1).max(100).optional().describe('Maximum number of events to return (1-100)'),
+});
+
+export type GetCalendarViewInput = z.infer<typeof GetCalendarViewSchema>;
+
+/**
+ * Sanitized calendar event response.
+ */
+export interface SanitizedCalendarEvent {
+  id: string;
+  subject: string;
+  start: string;
+  end: string;
+  startTimeZone: string;
+  endTimeZone: string;
+  location?: string;
+  organizer?: {
+    name: string;
+    email: string;
+  };
+  attendees?: Array<{
+    name: string;
+    email: string;
+    type: string;
+    response?: string;
+  }>;
+  isAllDay: boolean;
+  webLink?: string;
+}
