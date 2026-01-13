@@ -69,64 +69,45 @@ From the app's **Overview** page, copy:
 4. Click **Add permissions**
 5. If you see "Grant admin consent" and have admin access, click it
 
-### Step 5: Enable Public Client Flows (CRITICAL!)
+### Step 5: Configure as Confidential Client (CRITICAL!)
 
-**This step is required for Device Code Flow authentication.**
+**This server uses a client secret, so it must be configured as a confidential client.**
 
 1. Go to **Authentication**
 2. Scroll to **Advanced settings**
-3. Set **"Allow public client flows"** to **Yes**
+3. Set **"Allow public client flows"** to **No**
 4. Click **Save**
 
-> Without this setting, Device Code Flow authentication will fail with an "invalid_client" error.
+> **Why No?** This server runs on your machine (like a server) and keeps the client secret secure. Setting to "Yes" makes it a public client which cannot use secrets. Using "No" is the more secure option.
 
 ---
 
 ## Authentication Methods
 
-### Method 1: Device Code Flow (Recommended)
+### Method 1: OAuth Callback Flow (Recommended)
 
-Device Code Flow is the most reliable method. It doesn't require a localhost callback, avoiding browser caching issues.
-
-```bash
-cd C:/ai/mcp-servers/ms-graph
-node device-code-auth.mjs
-```
-
-**What happens:**
-1. Script displays a URL and a user code
-2. Open the URL in any browser (even on a different device)
-3. Enter the code shown in the terminal
-4. Sign in with your Microsoft account
-5. Grant the requested permissions
-6. Script automatically saves tokens and exits
-
-**Advantages:**
-- No localhost callback required
-- Works from any terminal/SSH session
-- Avoids browser redirect caching problems
-- Can authenticate from a different device
-
-### Method 2: OAuth Callback Flow (Alternative)
-
-Traditional OAuth flow with localhost redirect. Use this if Device Code doesn't work for your scenario.
+This method uses the standard OAuth authorization code flow with a client secret.
 
 ```bash
 cd C:/ai/mcp-servers/ms-graph
-node simple-auth.mjs
+node manual-auth.mjs
 ```
 
 **What happens:**
 1. Script displays an authorization URL
 2. Open the URL in your browser
-3. Sign in and grant permissions
-4. Browser redirects to `localhost:3000/callback`
-5. Script captures the code and exchanges for tokens
+3. Sign in with your Microsoft account
+4. Grant the requested permissions
+5. Browser redirects to `localhost:3000/callback`
+6. Script exchanges the code for tokens using your client secret
+7. Tokens saved to `.tokens.json`
 
-**Known Issues:**
-- Browser may cache failed redirects with corrupted data
-- Port 3000 must be available
-- If issues occur, use an incognito/private browser window
+**After authentication:**
+- **Restart Claude Code** to load the MCP server with new tokens
+
+**Tips:**
+- If you see errors, try an incognito/private browser window
+- Ensure port 3000 is not in use by another application
 
 ---
 
@@ -176,16 +157,17 @@ Add to `~/.claude.json`:
 
 ## Token Storage
 
-After successful authentication, tokens are stored in:
+With `TOKEN_STORAGE=file` (recommended), tokens are stored in:
 
 | File | Purpose |
 |------|---------|
-| `.msal-cache.json` | MSAL token cache (access + refresh tokens) |
-| `.msal-account.json` | Account ID reference |
+| `.tokens.json` | Access token, refresh token, and expiration |
 
-These files are located in the ms-graph directory and are gitignored.
+This file is located in the ms-graph directory and is gitignored.
 
-**Token Refresh**: MSAL automatically refreshes access tokens using the stored refresh token. No manual intervention needed.
+**Token Refresh**: The server automatically refreshes access tokens when they expire using the stored refresh token.
+
+> **Note**: If using `TOKEN_STORAGE=msal`, tokens are stored in `.msal-cache.json` and `.msal-account.json` instead.
 
 ---
 
@@ -196,28 +178,50 @@ These files are located in the ms-graph directory and are gitignored.
 **Symptoms**: Auth script says success, but `get_auth_status` returns false.
 
 **Causes & Fixes**:
-1. **Token files not found**: Verify `.msal-cache.json` exists in ms-graph directory
+1. **Token files not found**: Verify `.tokens.json` exists in ms-graph directory
 2. **Wrong working directory**: Ensure `cwd` is set in `~/.claude.json`
 3. **Restart required**: Restart Claude Code after authentication
+4. **Wrong TOKEN_STORAGE**: Ensure `TOKEN_STORAGE=file` in config
 
-### "invalid_client" error during Device Code Flow
+### "Client is public" error (AADSTS700025)
 
-**Cause**: Azure app not configured for public client flows.
+**Symptoms**: Error says "Client is public so neither 'client_assertion' nor 'client_secret' should be presented"
+
+**Cause**: Azure app is configured as a public client but code is using a client secret.
 
 **Fix**:
 1. Azure Portal → App registration → Authentication
-2. Set "Allow public client flows" to **Yes**
-3. Save and retry
+2. Set "Allow public client flows" to **No**
+3. Clear token cache: `rm .tokens.json .msal-cache.json .msal-account.json`
+4. Re-authenticate: `node manual-auth.mjs`
 
 ### "Invalid client secret" error
 
-**Cause**: Using the Secret ID instead of the Secret Value.
+**Cause 1**: Using the Secret ID instead of the Secret Value.
 
 **Fix**:
 1. Go to Azure Portal → Certificates & secrets
 2. Create a new client secret
 3. Copy the **Value** (not the ID) immediately
 4. Update your `.env` or `~/.claude.json`
+
+**Cause 2**: Windows system environment variable overriding `.env` file.
+
+**Symptoms**: Your `.env` has the correct secret but authentication fails. The wrong secret is being used.
+
+**Diagnosis**:
+```bash
+# Check if a system env var exists
+powershell -Command "[Environment]::GetEnvironmentVariable('AZURE_CLIENT_SECRET', 'User')"
+```
+
+**Fix**:
+```bash
+# Remove the system environment variable
+powershell -Command "[Environment]::SetEnvironmentVariable('AZURE_CLIENT_SECRET', '', 'User')"
+```
+
+> **Warning**: Never set Azure credentials as Windows system environment variables. They override `.env` files and can cause hard-to-debug issues. Always use `.env` or `~/.claude.json` instead.
 
 ### Browser shows scope errors with garbled text
 
@@ -311,14 +315,12 @@ This server only uses read permissions:
 
 ## Quick Reference
 
-### Authentication Commands
+### Authentication Command
 
 ```bash
-# Recommended: Device Code Flow
-node device-code-auth.mjs
-
-# Alternative: OAuth Callback
-node simple-auth.mjs
+cd C:/ai/mcp-servers/ms-graph
+node manual-auth.mjs
+# Then restart Claude Code
 ```
 
 ### Required Environment Variables
@@ -327,6 +329,7 @@ node simple-auth.mjs
 AZURE_CLIENT_ID      # From app registration Overview
 AZURE_TENANT_ID      # From app registration Overview
 AZURE_CLIENT_SECRET  # From Certificates & secrets (VALUE, not ID)
+TOKEN_STORAGE=file   # Use file-based token storage
 ```
 
 ### Required Azure Permissions
@@ -338,8 +341,8 @@ AZURE_CLIENT_SECRET  # From Certificates & secrets (VALUE, not ID)
 
 ### Required Azure Settings
 
-- Redirect URI: `http://localhost:3000/callback`
-- Allow public client flows: **Yes**
+- Redirect URI: `http://localhost:3000/callback` (Web platform)
+- Allow public client flows: **No** (confidential client with secret)
 
 ---
 

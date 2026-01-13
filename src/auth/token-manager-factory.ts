@@ -1,13 +1,15 @@
 import { ITokenManager } from './types.js';
 import { MsalTokenManager } from './msal-token-manager.js';
+import { FileTokenManager } from './file-token-manager.js';
 import { logger } from '../security/logger.js';
+import { getConfiguration } from '../config/environment.js';
 
 let tokenManagerInstance: ITokenManager | null = null;
 
 /**
  * Get or create a singleton token manager instance.
- * Uses MsalTokenManager which leverages MSAL's built-in cache
- * and acquireTokenSilent for automatic token refresh.
+ * Respects TOKEN_STORAGE config: 'file' uses FileTokenManager,
+ * others use MsalTokenManager.
  *
  * @returns Configured token manager instance
  */
@@ -16,8 +18,15 @@ export async function getTokenManager(): Promise<ITokenManager> {
     return tokenManagerInstance;
   }
 
-  logger.info('Using MSAL token storage');
-  tokenManagerInstance = new MsalTokenManager();
+  const config = getConfiguration();
+
+  if (config.TOKEN_STORAGE === 'file') {
+    logger.info('Using file-based token storage');
+    tokenManagerInstance = new FileTokenManager();
+  } else {
+    logger.info('Using MSAL token storage');
+    tokenManagerInstance = new MsalTokenManager();
+  }
 
   return tokenManagerInstance;
 }

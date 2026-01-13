@@ -53,9 +53,10 @@ See **[AUTH.md](./AUTH.md)** for complete Azure Portal setup instructions.
 
 **Quick summary:**
 1. Create app registration in [Azure Portal](https://portal.azure.com)
-2. Add API permissions: `Tasks.Read`, `Calendars.Read`, `User.Read`, `offline_access`
-3. Create client secret and save the VALUE (not ID)
-4. Enable "Allow public client flows" for Device Code authentication
+2. Add redirect URI: `http://localhost:3000/callback` (Web platform)
+3. Add API permissions: `Tasks.Read`, `Calendars.Read`, `User.Read`, `offline_access`
+4. Create client secret and save the **VALUE** (not ID)
+5. Set "Allow public client flows" to **No** (confidential client)
 
 ### Step 3: Configure Environment
 
@@ -75,10 +76,10 @@ Or configure in `~/.claude.json` (see [AUTH.md](./AUTH.md#configuration) for det
 ### Step 4: Authenticate
 
 ```bash
-node device-code-auth.mjs
+node manual-auth.mjs
 ```
 
-Follow the prompts to sign in with your Microsoft account.
+Open the URL displayed, sign in with your Microsoft account, and grant permissions.
 
 ### Step 5: Configure Claude Code
 
@@ -169,8 +170,7 @@ ms-graph/
 │   │   └── calendar-service.ts      # Calendar business logic
 │   ├── mcp/               # MCP server implementation
 │   └── security/          # Security primitives
-├── device-code-auth.mjs   # Device Code authentication script
-├── simple-auth.mjs        # OAuth callback authentication script
+├── manual-auth.mjs        # OAuth callback authentication script (recommended)
 ├── AUTH.md                # Authentication guide
 ├── SECURITY.md            # Security documentation
 └── README.md              # This file
@@ -207,8 +207,9 @@ For authentication issues, see **[AUTH.md - Troubleshooting](./AUTH.md#troublesh
 
 | Problem | Solution |
 |---------|----------|
-| "Not authenticated" | Run `node device-code-auth.mjs` and restart Claude Code |
-| "Invalid client secret" | Use secret VALUE (not ID) from Azure Portal |
+| "Not authenticated" | Run `node manual-auth.mjs` and restart Claude Code |
+| "Invalid client secret" | Use secret VALUE (not ID); check for Windows env var override |
+| "Client is public" error | Set "Allow public client flows" to **No** in Azure |
 | Rate limit errors | Default is 60 req/min; check for loops in prompts |
 | Build errors | Ensure Node.js v18+, run `npm run clean && npm install && npm run build` |
 | MCP not loading | Verify `~/.claude.json` path and `cwd` setting |
