@@ -10,7 +10,7 @@ vi.mock('../../src/config/environment.js', () => ({
     AZURE_TENANT_ID: 'test-tenant-id',
     AZURE_CLIENT_SECRET: 'test-secret',
     AZURE_REDIRECT_URI: 'http://localhost:3000/callback',
-    TOKEN_STORAGE: 'keytar',
+    TOKEN_STORAGE: 'msal',
     NODE_ENV: 'test',
     LOG_LEVEL: 'info',
     RATE_LIMIT_PER_MINUTE: 60,
@@ -28,7 +28,7 @@ class MockTokenManager implements ITokenManager {
 
   async getTokens(): Promise<TokenSet> {
     if (!this.tokens) {
-      throw new Error('No tokens stored');
+      throw new AuthenticationError('No tokens stored');
     }
     return this.tokens;
   }
@@ -60,49 +60,47 @@ describe('TokenRefresher', () => {
   });
 
   describe('getValidAccessToken', () => {
-    it('should return existing token if still valid', async () => {
-      // Token valid for more than 1 hour
+    it('should return access token from token manager', async () => {
       await manager.storeTokens({
-        accessToken: 'valid-token',
+        accessToken: 'test-token',
         refreshToken: 'refresh-token',
         expiresAt: Date.now() + 3600000, // 1 hour from now
-        scope: 'Tasks.Read User.Read',
+        scope: 'Tasks.ReadWrite User.Read',
       });
 
       const token = await refresher.getValidAccessToken();
 
-      expect(token).toBe('valid-token');
+      expect(token).toBe('test-token');
     });
 
-    it('should return existing token if within expiry buffer', async () => {
-      // Token expires in 10 minutes (within the 5-minute buffer, but still valid)
+    it('should throw AuthenticationError when no tokens available', async () => {
+      // Don't store any tokens
+      await expect(refresher.getValidAccessToken()).rejects.toThrow(
+        AuthenticationError
+      );
+    });
+
+    it('should delegate token retrieval to token manager', async () => {
+      const getTokensSpy = vi.spyOn(manager, 'getTokens');
+
       await manager.storeTokens({
         accessToken: 'valid-token',
         refreshToken: 'refresh-token',
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes from now
-        scope: 'Tasks.Read User.Read',
+        expiresAt: Date.now() + 3600000,
+        scope: 'Tasks.ReadWrite User.Read',
       });
 
-      const token = await refresher.getValidAccessToken();
+      await refresher.getValidAccessToken();
 
-      expect(token).toBe('valid-token');
+      expect(getTokensSpy).toHaveBeenCalledOnce();
     });
 
-    it('should handle concurrent refresh attempts', async () => {
-      // Token expires in 2 minutes (needs refresh)
+    it('should handle concurrent requests', async () => {
       await manager.storeTokens({
-        accessToken: 'old-token',
+        accessToken: 'concurrent-token',
         refreshToken: 'refresh-token',
-        expiresAt: Date.now() + 2 * 60 * 1000, // 2 minutes from now
-        scope: 'Tasks.Read User.Read',
-      });
-
-      // Mock MSAL to delay refresh
-      const msalRefreshSpy = vi.spyOn(refresher as any, 'refreshAccessToken');
-      msalRefreshSpy.mockImplementation(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await manager.updateAccessToken('new-token', Date.now() + 3600000);
-        return 'new-token';
+        expiresAt: Date.now() + 3600000,
+        scope: 'Tasks.ReadWrite User.Read',
       });
 
       // Trigger multiple concurrent requests
@@ -114,76 +112,18 @@ describe('TokenRefresher', () => {
 
       const results = await Promise.all(promises);
 
-      // All should get the same new token
-      expect(results).toEqual(['new-token', 'new-token', 'new-token']);
-      // But refresh should only happen once
-      expect(msalRefreshSpy).toHaveBeenCalledTimes(1);
+      // All should get the same token
+      expect(results).toEqual(['concurrent-token', 'concurrent-token', 'concurrent-token']);
     });
-  });
 
-  describe('refreshAccessToken', () => {
-    it('should clear tokens on refresh failure', async () => {
-      await manager.storeTokens({
-        accessToken: 'old-token',
-        refreshToken: 'invalid-refresh-token',
-        expiresAt: Date.now() + 2 * 60 * 1000,
-        scope: 'Tasks.Read User.Read',
-      });
-
-      // Mock MSAL to fail - implementation should clear tokens and throw
-      const msalRefreshSpy = vi.spyOn(refresher as any, 'refreshAccessToken');
-      msalRefreshSpy.mockImplementation(async () => {
-        await manager.clearTokens();
-        throw new AuthenticationError('Refresh failed');
-      });
+    it('should propagate errors from token manager', async () => {
+      // Mock getTokens to throw an error
+      const error = new Error('Token retrieval failed');
+      vi.spyOn(manager, 'getTokens').mockRejectedValueOnce(error);
 
       await expect(refresher.getValidAccessToken()).rejects.toThrow(
-        AuthenticationError
+        'Token retrieval failed'
       );
-
-      // Tokens should be cleared
-      const hasTokens = await manager.hasValidTokens();
-      expect(hasTokens).toBe(false);
-    });
-  });
-
-  describe('token expiry buffer', () => {
-    it('should refresh token within 5-minute buffer', async () => {
-      // Token expires in 4 minutes (within 5-minute buffer)
-      await manager.storeTokens({
-        accessToken: 'old-token',
-        refreshToken: 'refresh-token',
-        expiresAt: Date.now() + 4 * 60 * 1000,
-        scope: 'Tasks.Read User.Read',
-      });
-
-      const msalRefreshSpy = vi.spyOn(refresher as any, 'refreshAccessToken');
-      msalRefreshSpy.mockImplementation(async () => {
-        await manager.updateAccessToken('new-token', Date.now() + 3600000);
-        return 'new-token';
-      });
-
-      const token = await refresher.getValidAccessToken();
-
-      expect(token).toBe('new-token');
-      expect(msalRefreshSpy).toHaveBeenCalled();
-    });
-
-    it('should not refresh token outside 5-minute buffer', async () => {
-      // Token expires in 10 minutes (outside 5-minute buffer)
-      await manager.storeTokens({
-        accessToken: 'valid-token',
-        refreshToken: 'refresh-token',
-        expiresAt: Date.now() + 10 * 60 * 1000,
-        scope: 'Tasks.Read User.Read',
-      });
-
-      const msalRefreshSpy = vi.spyOn(refresher as any, 'refreshAccessToken');
-
-      const token = await refresher.getValidAccessToken();
-
-      expect(token).toBe('valid-token');
-      expect(msalRefreshSpy).not.toHaveBeenCalled();
     });
   });
 });

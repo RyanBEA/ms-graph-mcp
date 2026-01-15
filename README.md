@@ -1,22 +1,25 @@
 # MS-Graph MCP Server
 
-A **security-first** Model Context Protocol (MCP) server providing read-only access to Microsoft To Do tasks and Calendar events for Claude Code and Claude Desktop.
+A **security-first** Model Context Protocol (MCP) server providing full access to Microsoft To Do, Planner, and Calendar for Claude Code and Claude Desktop.
 
 ## Features
 
 - **Security-First Design** - CSRF protection, input validation, automatic token redaction
-- **Read-Only Access** - Safe integration with `Tasks.Read`, `Calendars.Read`, and `User.Read` scopes
+- **Full CRUD Support** - Create, read, update, and delete tasks in To Do and Planner
+- **Microsoft Planner Integration** - Manage Planner tasks, plans, and buckets
 - **Secure Token Storage** - MSAL cache with automatic token refresh
 - **Rate Limited** - Token bucket algorithm (60 req/min) with circuit breaker
-- **Well Tested** - 161 tests passing with 91.68% code coverage
+- **Well Tested** - 160+ tests passing
 - **Comprehensive Logging** - Winston with automatic sensitive data redaction
 
 ## MCP Tools Available
 
-The MS-Graph MCP server provides 7 read-only tools:
+The MS-Graph MCP server provides 24 tools:
 
-### Task Tools
+### Authentication
 1. **`get_auth_status`** - Check authentication status (no sensitive data exposed)
+
+### To Do - Read Tools
 2. **`list_task_lists`** - Get all task lists for the authenticated user
 3. **`list_tasks`** - Get tasks with filtering:
    - `all` - All tasks (default)
@@ -30,12 +33,35 @@ The MS-Graph MCP server provides 7 read-only tools:
 4. **`get_task`** - Get a specific task by list ID and task ID
 5. **`search_tasks`** - Search tasks across all lists (1-100 char query, 1-50 result limit)
 
+### To Do - Write Tools
+6. **`create_task`** - Create a new task in a task list
+7. **`update_task`** - Update task title, due date, or body content
+8. **`complete_task`** - Mark a task as completed
+9. **`uncomplete_task`** - Mark a task as not started
+10. **`delete_task`** - Delete a task (requires `confirm: true`)
+11. **`create_task_list`** - Create a new task list
+12. **`delete_task_list`** - Delete a task list (requires `confirm: true`)
+
+### Planner - Read Tools
+13. **`list_my_planner_tasks`** - Get all Planner tasks assigned to the user
+14. **`get_planner_plan`** - Get a specific Planner plan by ID
+15. **`list_plan_tasks`** - Get all tasks in a Planner plan
+16. **`list_plan_buckets`** - Get all buckets (columns) in a Planner plan
+17. **`get_planner_task`** - Get a specific Planner task with details
+
+### Planner - Write Tools
+18. **`create_planner_task`** - Create a new task in a Planner plan/bucket
+19. **`update_planner_task`** - Update task title, due date, or priority
+20. **`complete_planner_task`** - Mark a Planner task as 100% complete
+21. **`uncomplete_planner_task`** - Mark a Planner task as 0% complete
+22. **`delete_planner_task`** - Delete a Planner task (requires `confirm: true`)
+
 ### Calendar Tools
-6. **`list_calendar_events`** - Get calendar events with time range filters:
+23. **`list_calendar_events`** - Get calendar events with time range filters:
    - `today` - Events today (default)
    - `this-week` - Events in the next 7 days
    - `this-month` - Events in the next 30 days
-7. **`get_calendar_view`** - Get events in a custom date range
+24. **`get_calendar_view`** - Get events in a custom date range
 
 ## Quick Start
 
@@ -54,7 +80,7 @@ See **[AUTH.md](./AUTH.md)** for complete Azure Portal setup instructions.
 **Quick summary:**
 1. Create app registration in [Azure Portal](https://portal.azure.com)
 2. Add redirect URI: `http://localhost:3000/callback` (Web platform)
-3. Add API permissions: `Tasks.Read`, `Calendars.Read`, `User.Read`, `offline_access`
+3. Add API permissions: `Tasks.ReadWrite`, `Calendars.Read`, `User.Read`, `offline_access`
 4. Create client secret and save the **VALUE** (not ID)
 5. Set "Allow public client flows" to **No** (confidential client)
 
@@ -118,8 +144,7 @@ For detailed authentication instructions, troubleshooting, and security notes, s
 
 Topics covered:
 - Azure Portal setup (step-by-step)
-- Device Code Flow (recommended)
-- OAuth Callback Flow (alternative)
+- OAuth authentication
 - Token storage and refresh
 - Troubleshooting common errors
 - Re-authentication process
@@ -144,8 +169,8 @@ Topics covered:
 
 ```bash
 npm run dev          # Development mode with auto-reload
-npm test             # Run all tests (161 tests)
-npm run test:coverage # Run with coverage (91.68%)
+npm test             # Run all tests
+npm run test:coverage # Run with coverage report
 npm run test:security # Security-specific tests only
 npm run type-check   # TypeScript type checking
 npm run lint         # Linting
@@ -166,7 +191,8 @@ ms-graph/
 │   │   └── secure-oauth-client.ts   # CSRF-protected OAuth
 │   ├── config/            # Configuration management
 │   ├── graph/             # Microsoft Graph API client
-│   │   ├── todo-service.ts          # Tasks business logic
+│   │   ├── todo-service.ts          # To Do tasks business logic
+│   │   ├── planner-service.ts       # Planner tasks business logic
 │   │   └── calendar-service.ts      # Calendar business logic
 │   ├── mcp/               # MCP server implementation
 │   └── security/          # Security primitives
@@ -190,11 +216,12 @@ This project follows **security-first principles**:
 6. **OAuth Security** - CSRF protection with cryptographic state tokens
 7. **Token Management** - MSAL cache with automatic refresh (never in logs)
 
-### Read-Only Access
+### Task Management Access
 
-This server only uses read permissions:
-- Cannot create, modify, or delete tasks
-- Cannot create, modify, or delete calendar events
+This server supports full task management for To Do and Planner:
+- **To Do**: Create, read, update, complete, and delete tasks and task lists
+- **Planner**: Create, read, update, complete, and delete Planner tasks
+- **Calendar**: Read-only access to calendar events
 - Cannot access mail, files, or other sensitive data
 
 For detailed security information, see [SECURITY.md](./SECURITY.md).

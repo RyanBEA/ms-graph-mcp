@@ -10,6 +10,9 @@ import {
   validateTaskId,
   validateODataFilter,
   validateSearchQuery,
+  validateTaskTitle,
+  validateDueDate,
+  validatePriority,
 } from '../security/validators.js';
 
 /**
@@ -446,5 +449,177 @@ export class ToDoService {
     }
 
     throw new Error('No task lists found for user');
+  }
+
+  // ============================================
+  // Write Operations
+  // ============================================
+
+  /**
+   * Create a new task in a list.
+   *
+   * @param listId - Task list ID (optional, uses default list if not provided)
+   * @param data - Task data
+   * @returns Created task
+   */
+  async createTask(
+    listId: string | undefined,
+    data: {
+      title: string;
+      dueDateTime?: string;
+      importance?: 'low' | 'normal' | 'high';
+      body?: string;
+    }
+  ): Promise<ToDoTask> {
+    const effectiveListId = listId ?? await this.getDefaultListId();
+    validateListId(effectiveListId);
+    validateTaskTitle(data.title);
+    if (data.dueDateTime) validateDueDate(data.dueDateTime);
+    if (data.importance) validatePriority(data.importance);
+
+    logger.info('Creating task', { listId: effectiveListId, titleLength: data.title.length });
+
+    const body: Record<string, any> = {
+      title: data.title,
+    };
+
+    if (data.dueDateTime) {
+      body.dueDateTime = {
+        dateTime: new Date(data.dueDateTime).toISOString(),
+        timeZone: 'UTC',
+      };
+    }
+
+    if (data.importance) {
+      body.importance = data.importance;
+    }
+
+    if (data.body) {
+      body.body = {
+        content: data.body,
+        contentType: 'text',
+      };
+    }
+
+    const response = await this.graphClient.post<ToDoTask>(
+      `/me/todo/lists/${effectiveListId}/tasks`,
+      body
+    );
+
+    logger.info('Task created', { taskId: response.id });
+    return response;
+  }
+
+  /**
+   * Update an existing task.
+   *
+   * @param listId - Task list ID
+   * @param taskId - Task ID
+   * @param data - Fields to update
+   * @returns Updated task
+   */
+  async updateTask(
+    listId: string,
+    taskId: string,
+    data: {
+      title?: string;
+      dueDateTime?: string | null;
+      importance?: 'low' | 'normal' | 'high';
+      status?: 'notStarted' | 'inProgress' | 'completed';
+      body?: string;
+    }
+  ): Promise<ToDoTask> {
+    validateListId(listId);
+    validateTaskId(taskId);
+    if (data.title) validateTaskTitle(data.title);
+    if (data.dueDateTime) validateDueDate(data.dueDateTime);
+    if (data.importance) validatePriority(data.importance);
+
+    logger.info('Updating task', { listId, taskId });
+
+    const body: Record<string, any> = {};
+
+    if (data.title !== undefined) body.title = data.title;
+    if (data.status !== undefined) body.status = data.status;
+    if (data.importance !== undefined) body.importance = data.importance;
+
+    if (data.dueDateTime === null) {
+      body.dueDateTime = null;
+    } else if (data.dueDateTime) {
+      body.dueDateTime = {
+        dateTime: new Date(data.dueDateTime).toISOString(),
+        timeZone: 'UTC',
+      };
+    }
+
+    if (data.body !== undefined) {
+      body.body = { content: data.body, contentType: 'text' };
+    }
+
+    const response = await this.graphClient.patch<ToDoTask>(
+      `/me/todo/lists/${listId}/tasks/${taskId}`,
+      body
+    );
+
+    logger.info('Task updated', { taskId });
+    return response;
+  }
+
+  /**
+   * Complete a task.
+   */
+  async completeTask(listId: string, taskId: string): Promise<ToDoTask> {
+    return this.updateTask(listId, taskId, { status: 'completed' });
+  }
+
+  /**
+   * Uncomplete a task (set back to not started).
+   */
+  async uncompleteTask(listId: string, taskId: string): Promise<ToDoTask> {
+    return this.updateTask(listId, taskId, { status: 'notStarted' });
+  }
+
+  /**
+   * Delete a task.
+   */
+  async deleteTask(listId: string, taskId: string): Promise<void> {
+    validateListId(listId);
+    validateTaskId(taskId);
+
+    logger.info('Deleting task', { listId, taskId });
+
+    await this.graphClient.delete(`/me/todo/lists/${listId}/tasks/${taskId}`);
+
+    logger.info('Task deleted', { taskId });
+  }
+
+  /**
+   * Create a new task list.
+   */
+  async createTaskList(displayName: string): Promise<ToDoTaskList> {
+    validateTaskTitle(displayName);
+
+    logger.info('Creating task list', { displayName });
+
+    const response = await this.graphClient.post<ToDoTaskList>(
+      '/me/todo/lists',
+      { displayName }
+    );
+
+    logger.info('Task list created', { listId: response.id });
+    return response;
+  }
+
+  /**
+   * Delete a task list.
+   */
+  async deleteTaskList(listId: string): Promise<void> {
+    validateListId(listId);
+
+    logger.info('Deleting task list', { listId });
+
+    await this.graphClient.delete(`/me/todo/lists/${listId}`);
+
+    logger.info('Task list deleted', { listId });
   }
 }

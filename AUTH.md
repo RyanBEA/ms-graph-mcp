@@ -61,13 +61,15 @@ From the app's **Overview** page, copy:
 
 | Permission | Description |
 |------------|-------------|
-| `Tasks.Read` | Read user's tasks and task lists |
+| `Tasks.ReadWrite` | Read and write user's To Do and Planner tasks |
 | `Calendars.Read` | Read user's calendar events |
 | `User.Read` | Sign in and read user profile |
 | `offline_access` | Maintain access via refresh tokens |
 
 4. Click **Add permissions**
 5. If you see "Grant admin consent" and have admin access, click it
+
+> **Note**: If upgrading from a previous version that used `Tasks.Read`, you must re-authenticate to grant the new `Tasks.ReadWrite` permission.
 
 ### Step 5: Configure as Confidential Client (CRITICAL!)
 
@@ -239,7 +241,7 @@ powershell -Command "[Environment]::SetEnvironmentVariable('AZURE_CLIENT_SECRET'
 **Fix**:
 1. Close ALL browser windows completely
 2. Use an incognito/private browser window
-3. Or switch to Device Code Flow (recommended)
+3. Clear browser cache for Microsoft login sites
 
 ### "Port 3000 already in use"
 
@@ -320,10 +322,11 @@ These are already in `.gitignore`.
 - Refresh tokens are long-lived but rotated automatically by MSAL
 - All tokens are stored locally, never transmitted except to Microsoft
 
-### Read-Only Access
-This server only uses read permissions:
-- Cannot create, modify, or delete tasks
-- Cannot create, modify, or delete calendar events
+### Task Management Access
+This server supports full task management:
+- **To Do**: Create, read, update, complete, and delete tasks and task lists
+- **Planner**: Create, read, update, complete, and delete Planner tasks
+- **Calendar**: Read-only access to calendar events
 - Cannot access mail, files, or other sensitive data
 
 ---
@@ -349,7 +352,7 @@ TOKEN_STORAGE=msal   # Use MSAL for automatic token refresh
 
 ### Required Azure Permissions
 
-- `Tasks.Read` (Delegated)
+- `Tasks.ReadWrite` (Delegated) - For To Do and Planner tasks
 - `Calendars.Read` (Delegated)
 - `User.Read` (Delegated)
 - `offline_access` (Delegated)

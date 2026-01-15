@@ -89,15 +89,11 @@ export class SecureGraphClient {
         // Get fresh access token
         const accessToken = await this.tokenRefresher.getValidAccessToken();
 
-        // DEBUG: Log the URL being called
+        // Log the request (sanitized - endpoint only, no full URL)
         logger.debug('Making Graph API request', {
-          url: url,
           endpoint: endpoint,
           hasQueryParams: !!options?.queryParams
         });
-
-        // EMERGENCY LOGGING - always shows
-        console.error(`[TOTO DEBUG] Calling: ${url}`);
 
         // Make request
         const response = await fetch(url, {
@@ -110,6 +106,118 @@ export class SecureGraphClient {
         });
 
         return this.handleResponse<GraphResponse<T>>(response, url, endpoint);
+      });
+    });
+  }
+
+  /**
+   * Make a POST request to Microsoft Graph API.
+   * Used for creating resources.
+   */
+  async post<T = any>(
+    endpoint: string,
+    body: Record<string, any>,
+    options?: { headers?: Record<string, string> }
+  ): Promise<T> {
+    await this.rateLimiter.checkLimit();
+    const url = this.buildUrl(endpoint);
+
+    return this.circuitBreaker.execute(async () => {
+      return this.executeWithRetry<T>(async () => {
+        const accessToken = await this.tokenRefresher.getValidAccessToken();
+
+        logger.debug('Making Graph API POST request', {
+          endpoint: endpoint,
+        });
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            ...options?.headers,
+          },
+          body: JSON.stringify(body),
+        });
+
+        return this.handleResponse<T>(response, url, endpoint);
+      });
+    });
+  }
+
+  /**
+   * Make a PATCH request to Microsoft Graph API.
+   * Used for updating resources.
+   */
+  async patch<T = any>(
+    endpoint: string,
+    body: Record<string, any>,
+    options?: { headers?: Record<string, string> }
+  ): Promise<T> {
+    await this.rateLimiter.checkLimit();
+    const url = this.buildUrl(endpoint);
+
+    return this.circuitBreaker.execute(async () => {
+      return this.executeWithRetry<T>(async () => {
+        const accessToken = await this.tokenRefresher.getValidAccessToken();
+
+        logger.debug('Making Graph API PATCH request', {
+          endpoint: endpoint,
+        });
+
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            ...options?.headers,
+          },
+          body: JSON.stringify(body),
+        });
+
+        // PATCH may return 204 No Content
+        if (response.status === 204) {
+          return {} as T;
+        }
+
+        return this.handleResponse<T>(response, url, endpoint);
+      });
+    });
+  }
+
+  /**
+   * Make a DELETE request to Microsoft Graph API.
+   * Used for deleting resources.
+   */
+  async delete(
+    endpoint: string,
+    options?: { headers?: Record<string, string> }
+  ): Promise<void> {
+    await this.rateLimiter.checkLimit();
+    const url = this.buildUrl(endpoint);
+
+    return this.circuitBreaker.execute(async () => {
+      return this.executeWithRetry<void>(async () => {
+        const accessToken = await this.tokenRefresher.getValidAccessToken();
+
+        logger.debug('Making Graph API DELETE request', {
+          endpoint: endpoint,
+        });
+
+        const response = await fetch(url, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            ...options?.headers,
+          },
+        });
+
+        // DELETE typically returns 204 No Content
+        if (response.status === 204 || response.ok) {
+          return;
+        }
+
+        await this.handleResponse(response, url, endpoint);
       });
     });
   }
@@ -160,7 +268,7 @@ export class SecureGraphClient {
   /**
    * Handle HTTP response and parse JSON.
    */
-  private async handleResponse<T>(response: Response, url?: string, endpoint?: string): Promise<T> {
+  private async handleResponse<T>(response: Response, _url?: string, _endpoint?: string): Promise<T> {
     // Success
     if (response.ok) {
       const data: unknown = await response.json();
@@ -179,13 +287,10 @@ export class SecureGraphClient {
       errorData = { message: response.statusText };
     }
 
-    // Log error (sanitized)
+    // Log error (sanitized - no URLs, IDs, or error details that could leak sensitive info)
     logger.error('Graph API request failed', {
       status: response.status,
       errorCode: errorData?.error?.code,
-      url: url,  // Log the URL that failed
-      endpoint: endpoint,
-      errorMessage: errorData?.error?.message,  // Temporarily log to debug
     });
 
     // Handle specific error codes

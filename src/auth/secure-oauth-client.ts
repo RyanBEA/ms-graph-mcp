@@ -29,7 +29,7 @@ export class SecureOAuthClient {
   private readonly msalClient: ConfidentialClientApplication;
   private readonly tokenManager: ITokenManager;
   private readonly stateStore = new Map<string, StateEntry>();
-  private readonly scopes = ['Tasks.Read', 'Calendars.Read', 'User.Read', 'offline_access'];
+  private readonly scopes = ['Tasks.ReadWrite', 'Calendars.Read', 'User.Read', 'offline_access'];
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(tokenManager: ITokenManager) {

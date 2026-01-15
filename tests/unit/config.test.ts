@@ -31,11 +31,12 @@ describe('Configuration', () => {
     process.env.AZURE_TENANT_ID = 'test-tenant-id';
     process.env.AZURE_CLIENT_SECRET = 'test-secret';
     process.env.AZURE_REDIRECT_URI = 'http://localhost:3000/callback';
-    // Clear NODE_ENV to test default
+    // Clear optional fields to test defaults
     delete process.env.NODE_ENV;
+    delete process.env.TOKEN_STORAGE;
 
     const config = loadConfiguration();
-    expect(config.TOKEN_STORAGE).toBe('keytar');
+    expect(config.TOKEN_STORAGE).toBe('msal');  // Default changed from 'file' to 'msal'
     expect(config.NODE_ENV).toBe('development');
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.RATE_LIMIT_PER_MINUTE).toBe(60);
@@ -43,6 +44,11 @@ describe('Configuration', () => {
   });
 
   it('should reject missing required fields', () => {
+    // Clear all Azure config to ensure missing required fields
+    delete process.env.AZURE_CLIENT_ID;
+    delete process.env.AZURE_TENANT_ID;
+    delete process.env.AZURE_CLIENT_SECRET;
+    delete process.env.AZURE_REDIRECT_URI;
     expect(() => loadConfiguration()).toThrow();
   });
 

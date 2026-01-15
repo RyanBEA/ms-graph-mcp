@@ -135,7 +135,7 @@ export class MsalTokenManager implements ITokenManager {
       // Use MSAL's acquireTokenSilent to get a fresh token
       const response = await this.msalClient.acquireTokenSilent({
         account,
-        scopes: ['Tasks.Read', 'Calendars.Read', 'User.Read', 'offline_access'],
+        scopes: ['Tasks.ReadWrite', 'Calendars.Read', 'User.Read', 'offline_access'],
       });
 
       if (!response || !response.accessToken) {
@@ -168,7 +168,7 @@ export class MsalTokenManager implements ITokenManager {
   }
 
   /**
-   * Clear tokens by removing the account from MSAL cache.
+   * Clear tokens by removing the account from MSAL cache and deleting token files.
    */
   async clearTokens(): Promise<void> {
     try {
@@ -185,6 +185,35 @@ export class MsalTokenManager implements ITokenManager {
 
         this.accountId = null;
       }
+
+      // Persist the cleared cache to disk
+      await this.saveCache();
+
+      // Delete token files from disk
+      try {
+        await fs.unlink(CACHE_FILE);
+        logger.debug('Deleted MSAL cache file');
+      } catch (error) {
+        // File may not exist, that's okay
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          logger.warn('Failed to delete MSAL cache file', { error });
+        }
+      }
+
+      try {
+        await fs.unlink(ACCOUNT_FILE);
+        logger.debug('Deleted account file');
+      } catch (error) {
+        // File may not exist, that's okay
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          logger.warn('Failed to delete account file', { error });
+        }
+      }
+
+      // Reset cache loaded flag so next operation reloads fresh
+      this.cacheLoaded = false;
+
+      logger.info('Token files cleared from disk');
     } catch (error) {
       logger.error('Failed to clear tokens from MSAL cache', { error });
       throw new TokenStorageError('Failed to clear tokens');

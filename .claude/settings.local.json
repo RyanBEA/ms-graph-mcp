@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(doc-check)",
+      "Bash(npm test)"
+    ]
+  }
+}

@@ -12,8 +12,8 @@ const envSchema = z.object({
   AZURE_CLIENT_SECRET: z.string().min(1, 'Azure Client Secret is required'),
   AZURE_REDIRECT_URI: z.string().url('Must be valid URL'),
 
-  // Token Storage
-  TOKEN_STORAGE: z.enum(['1password', 'keytar', 'msal', 'file']).default('file'),
+  // Token Storage (default: msal for security; 'file' requires explicit opt-in)
+  TOKEN_STORAGE: z.enum(['1password', 'keytar', 'msal', 'file']).default('msal'),
   OP_SERVICE_ACCOUNT_TOKEN: z.string().optional(),
 
   // Environment

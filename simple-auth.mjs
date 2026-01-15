@@ -14,7 +14,7 @@ const config = {
 };
 
 const pca = new ConfidentialClientApplication(config);
-const scopes = ['Tasks.Read', 'Calendars.Read', 'User.Read', 'offline_access'];
+const scopes = ['Tasks.ReadWrite', 'Calendars.Read', 'User.Read', 'offline_access'];
 
 // Generate auth URL
 const authUrl = await pca.getAuthCodeUrl({
@@ -40,16 +40,26 @@ const server = http.createServer(async (req, res) => {
           redirectUri: 'http://localhost:3000/callback'
         });
         
-        // Save tokens
-        await fs.writeFile('.tokens.json', JSON.stringify({
-          accessToken: result.accessToken,
-          refreshToken: result.account?.homeAccountId ? 'stored_in_msal_cache' : null,
-          expiresAt: result.expiresOn?.toISOString()
-        }, null, 2));
-        
-        // Save MSAL cache
+        // Save MSAL cache (always - this is the secure storage)
         const cache = pca.getTokenCache().serialize();
         await fs.writeFile('.msal-cache.json', cache);
+
+        // Save account ID for token manager lookup
+        if (result.account?.homeAccountId) {
+          await fs.writeFile('.msal-account.json', JSON.stringify({
+            accountId: result.account.homeAccountId
+          }));
+        }
+
+        // Only write plaintext .tokens.json if explicitly using file storage
+        if (process.env.TOKEN_STORAGE === 'file') {
+          await fs.writeFile('.tokens.json', JSON.stringify({
+            accessToken: result.accessToken,
+            refreshToken: result.account?.homeAccountId ? 'stored_in_msal_cache' : null,
+            expiresAt: result.expiresOn?.getTime() // numeric timestamp for file storage
+          }, null, 2));
+          console.log('Note: .tokens.json written (TOKEN_STORAGE=file mode)');
+        }
         
         console.log('\n✅ SUCCESS! Tokens saved.\n');
         res.end('<h1>Success! Tokens saved. Close this window.</h1>');

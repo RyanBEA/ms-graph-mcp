@@ -168,6 +168,148 @@ export function validateTaskId(taskId: string): void {
   validateListId(taskId); // Same validation rules
 }
 
+// ============================================
+// Planner validators
+// ============================================
+
+/**
+ * Validate Planner plan ID format.
+ * Same rules as list ID (Graph IDs are base64-ish).
+ */
+export function validatePlanId(planId: string): void {
+  validateListId(planId); // Same validation rules
+}
+
+/**
+ * Validate Planner bucket ID format.
+ * Same rules as list ID.
+ */
+export function validateBucketId(bucketId: string): void {
+  validateListId(bucketId); // Same validation rules
+}
+
+// ============================================
+// Write operation validators
+// ============================================
+
+/**
+ * Validate task title for write operations.
+ * Prevents XSS, injection, and other malicious content.
+ *
+ * @param title - Task title to validate
+ * @throws {ValidationError} If title is invalid
+ */
+export function validateTaskTitle(title: string): void {
+  if (!title || typeof title !== 'string') {
+    throw new ValidationError('Task title is required');
+  }
+
+  const trimmed = title.trim();
+
+  if (trimmed.length === 0) {
+    throw new ValidationError('Task title cannot be empty');
+  }
+
+  // Microsoft Graph API limit for task titles
+  if (trimmed.length > 400) {
+    logger.warn('Task title too long', { length: trimmed.length });
+    throw new ValidationError('Task title exceeds maximum length (400 characters)');
+  }
+
+  // Check for null bytes
+  if (trimmed.includes('\x00')) {
+    logger.warn('Null byte detected in task title');
+    throw new ValidationError('Task title contains null bytes');
+  }
+
+  // Check for suspicious patterns (XSS, script injection)
+  const suspiciousPatterns = [
+    /<script/i,
+    /javascript:/i,
+    /on\w+\s*=/i,  // Event handlers like onclick=
+  ];
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(trimmed)) {
+      logger.warn('Suspicious task title detected', {
+        pattern: pattern.toString(),
+      });
+      throw new ValidationError('Task title contains invalid patterns');
+    }
+  }
+
+  logger.debug('Task title validated', { length: trimmed.length });
+}
+
+/**
+ * Validate due date for write operations.
+ * Accepts ISO 8601 date format.
+ *
+ * @param dateStr - Date string to validate
+ * @returns Validated Date object
+ * @throws {ValidationError} If date is invalid
+ */
+export function validateDueDate(dateStr: string): Date {
+  if (!dateStr || typeof dateStr !== 'string') {
+    throw new ValidationError('Due date is required');
+  }
+
+  const trimmed = dateStr.trim();
+
+  // Check for null bytes
+  if (trimmed.includes('\x00')) {
+    logger.warn('Null byte detected in due date');
+    throw new ValidationError('Due date contains null bytes');
+  }
+
+  const date = new Date(trimmed);
+
+  if (isNaN(date.getTime())) {
+    logger.warn('Invalid due date format', { providedLength: trimmed.length });
+    throw new ValidationError('Invalid due date format. Use ISO format (YYYY-MM-DD)');
+  }
+
+  // Allow dates up to 5 years in future
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 5);
+
+  if (date > maxDate) {
+    logger.warn('Due date too far in future', { date: date.toISOString() });
+    throw new ValidationError('Due date cannot be more than 5 years in the future');
+  }
+
+  logger.debug('Due date validated', { date: date.toISOString() });
+
+  return date;
+}
+
+/**
+ * Validate priority value for To Do tasks.
+ *
+ * @param priority - Priority string
+ * @throws {ValidationError} If priority is invalid
+ */
+export function validatePriority(priority: string): void {
+  const allowed = ['low', 'normal', 'high'];
+  if (!allowed.includes(priority)) {
+    throw new ValidationError(`Invalid priority: ${priority}. Allowed: ${allowed.join(', ')}`);
+  }
+}
+
+/**
+ * Validate Planner percent complete value.
+ * Planner only accepts 0, 50, or 100.
+ *
+ * @param percent - Percent complete value
+ * @throws {ValidationError} If value is invalid
+ */
+export function validatePercentComplete(percent: number): void {
+  const allowed = [0, 50, 100];
+  if (!allowed.includes(percent)) {
+    throw new ValidationError(`Invalid percent complete: ${percent}. Allowed: 0, 50, 100`);
+  }
+}
+
 /**
  * Validate search query.
  * Prevents excessively long queries and injection attempts.

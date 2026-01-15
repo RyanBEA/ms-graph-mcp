@@ -5,7 +5,21 @@
 
 import { ToDoTask, ToDoTaskList } from '../graph/todo-service.js';
 import { CalendarEvent } from '../graph/calendar-service.js';
-import { SanitizedTask, SanitizedTaskList, SanitizedCalendarEvent } from '../mcp/types.js';
+import {
+  PlannerPlan,
+  PlannerTask,
+  PlannerBucket,
+  PlannerTaskDetails,
+} from '../graph/planner-service.js';
+import {
+  SanitizedTask,
+  SanitizedTaskList,
+  SanitizedCalendarEvent,
+  SanitizedPlannerPlan,
+  SanitizedPlannerTask,
+  SanitizedPlannerBucket,
+  SanitizedPlannerTaskDetails,
+} from '../mcp/types.js';
 import { logger } from './logger.js';
 
 /**
@@ -145,4 +159,121 @@ export function sanitizeCalendarEvent(event: CalendarEvent): SanitizedCalendarEv
 export function sanitizeCalendarEvents(events: CalendarEvent[]): SanitizedCalendarEvent[] {
   logger.debug('Sanitizing calendar events', { count: events.length });
   return events.map(sanitizeCalendarEvent);
+}
+
+// ============================================
+// Planner sanitizers
+// ============================================
+
+/**
+ * Convert Planner priority number to human-readable string.
+ * Planner uses 0-10, where lower = higher priority.
+ */
+function priorityToString(priority: number): string {
+  if (priority <= 1) return 'urgent';
+  if (priority <= 3) return 'high';
+  if (priority <= 5) return 'normal';
+  return 'low';
+}
+
+/**
+ * Sanitize a single Planner plan for client consumption.
+ *
+ * @param plan - Raw plan from Microsoft Graph API
+ * @returns Sanitized plan
+ */
+export function sanitizePlannerPlan(plan: PlannerPlan): SanitizedPlannerPlan {
+  return {
+    id: plan.id,
+    title: plan.title,
+    createdDateTime: plan.createdDateTime,
+    owner: plan.owner,
+  };
+}
+
+/**
+ * Sanitize multiple Planner plans.
+ *
+ * @param plans - Array of raw plans
+ * @returns Array of sanitized plans
+ */
+export function sanitizePlannerPlans(plans: PlannerPlan[]): SanitizedPlannerPlan[] {
+  logger.debug('Sanitizing Planner plans', { count: plans.length });
+  return plans.map(sanitizePlannerPlan);
+}
+
+/**
+ * Sanitize a single Planner task for client consumption.
+ * Converts priority number to string and counts assignees.
+ *
+ * @param task - Raw task from Microsoft Graph API
+ * @returns Sanitized task
+ */
+export function sanitizePlannerTask(task: PlannerTask): SanitizedPlannerTask {
+  return {
+    id: task.id,
+    planId: task.planId,
+    bucketId: task.bucketId,
+    title: task.title,
+    percentComplete: task.percentComplete,
+    priority: priorityToString(task.priority),
+    dueDateTime: task.dueDateTime,
+    startDateTime: task.startDateTime,
+    createdDateTime: task.createdDateTime,
+    assigneeCount: Object.keys(task.assignments || {}).length,
+  };
+}
+
+/**
+ * Sanitize multiple Planner tasks.
+ *
+ * @param tasks - Array of raw tasks
+ * @returns Array of sanitized tasks
+ */
+export function sanitizePlannerTasks(tasks: PlannerTask[]): SanitizedPlannerTask[] {
+  logger.debug('Sanitizing Planner tasks', { count: tasks.length });
+  return tasks.map(sanitizePlannerTask);
+}
+
+/**
+ * Sanitize a single Planner bucket for client consumption.
+ *
+ * @param bucket - Raw bucket from Microsoft Graph API
+ * @returns Sanitized bucket
+ */
+export function sanitizePlannerBucket(bucket: PlannerBucket): SanitizedPlannerBucket {
+  return {
+    id: bucket.id,
+    planId: bucket.planId,
+    name: bucket.name,
+  };
+}
+
+/**
+ * Sanitize multiple Planner buckets.
+ *
+ * @param buckets - Array of raw buckets
+ * @returns Array of sanitized buckets
+ */
+export function sanitizePlannerBuckets(buckets: PlannerBucket[]): SanitizedPlannerBucket[] {
+  logger.debug('Sanitizing Planner buckets', { count: buckets.length });
+  return buckets.map(sanitizePlannerBucket);
+}
+
+/**
+ * Sanitize Planner task details for client consumption.
+ * Converts checklist to simple array format.
+ *
+ * @param details - Raw task details from Microsoft Graph API
+ * @returns Sanitized task details
+ */
+export function sanitizePlannerTaskDetails(details: PlannerTaskDetails): SanitizedPlannerTaskDetails {
+  return {
+    id: details.id,
+    description: details.description || '',
+    checklist: Object.values(details.checklist || {}).map(item => ({
+      title: item.title,
+      isChecked: item.isChecked,
+    })),
+  };
 }
