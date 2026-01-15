@@ -84,30 +84,32 @@ From the app's **Overview** page, copy:
 
 ## Authentication Methods
 
-### Method 1: OAuth Callback Flow (Recommended)
+### Method 1: MSAL OAuth Flow (Recommended)
 
-This method uses the standard OAuth authorization code flow with a client secret.
+This method uses MSAL (Microsoft Authentication Library) for OAuth with automatic token refresh.
 
 ```bash
 cd C:/ai/mcp-servers/ms-graph
-node manual-auth.mjs
+node simple-auth.mjs
 ```
 
 **What happens:**
 1. Script displays an authorization URL
-2. Open the URL in your browser
+2. Open the URL in an **incognito/private browser window** (important!)
 3. Sign in with your Microsoft account
 4. Grant the requested permissions
 5. Browser redirects to `localhost:3000/callback`
-6. Script exchanges the code for tokens using your client secret
-7. Tokens saved to `.tokens.json`
+6. Script exchanges the code for tokens using MSAL
+7. Tokens saved to `.msal-cache.json`
 
 **After authentication:**
+- Create the account file if missing (see Troubleshooting)
 - **Restart Claude Code** to load the MCP server with new tokens
 
 **Tips:**
-- If you see errors, try an incognito/private browser window
+- Always use an incognito/private browser to avoid cached redirect issues
 - Ensure port 3000 is not in use by another application
+- MSAL automatically refreshes tokens when they expire (~1 hour)
 
 ---
 
@@ -122,7 +124,7 @@ AZURE_CLIENT_ID=your-application-client-id
 AZURE_TENANT_ID=your-directory-tenant-id
 AZURE_CLIENT_SECRET=your-client-secret-value
 AZURE_REDIRECT_URI=http://localhost:3000/callback
-TOKEN_STORAGE=file
+TOKEN_STORAGE=msal
 LOG_LEVEL=info
 ```
 
@@ -142,7 +144,7 @@ Add to `~/.claude.json`:
         "AZURE_TENANT_ID": "your-directory-tenant-id",
         "AZURE_CLIENT_SECRET": "your-client-secret-value",
         "AZURE_REDIRECT_URI": "http://localhost:3000/callback",
-        "TOKEN_STORAGE": "file",
+        "TOKEN_STORAGE": "msal",
         "LOG_LEVEL": "info"
       },
       "cwd": "C:/ai/mcp-servers/ms-graph"
@@ -157,17 +159,18 @@ Add to `~/.claude.json`:
 
 ## Token Storage
 
-With `TOKEN_STORAGE=file` (recommended), tokens are stored in:
+With `TOKEN_STORAGE=msal` (recommended), tokens are stored in:
 
 | File | Purpose |
 |------|---------|
-| `.tokens.json` | Access token, refresh token, and expiration |
+| `.msal-cache.json` | MSAL token cache (access, refresh, ID tokens) |
+| `.msal-account.json` | Account ID for cache lookup |
 
-This file is located in the ms-graph directory and is gitignored.
+These files are located in the ms-graph directory and are gitignored.
 
-**Token Refresh**: The server automatically refreshes access tokens when they expire using the stored refresh token.
+**Token Refresh**: MSAL automatically refreshes access tokens when they expire (~1 hour) using `acquireTokenSilent()`. No manual intervention required.
 
-> **Note**: If using `TOKEN_STORAGE=msal`, tokens are stored in `.msal-cache.json` and `.msal-account.json` instead.
+> **Note**: The `file` storage option (`.tokens.json`) is also available but does not support automatic token refresh.
 
 ---
 
@@ -178,10 +181,14 @@ This file is located in the ms-graph directory and is gitignored.
 **Symptoms**: Auth script says success, but `get_auth_status` returns false.
 
 **Causes & Fixes**:
-1. **Token files not found**: Verify `.tokens.json` exists in ms-graph directory
-2. **Wrong working directory**: Ensure `cwd` is set in `~/.claude.json`
-3. **Restart required**: Restart Claude Code after authentication
-4. **Wrong TOKEN_STORAGE**: Ensure `TOKEN_STORAGE=file` in config
+1. **MSAL files not found**: Verify `.msal-cache.json` and `.msal-account.json` exist in ms-graph directory
+2. **Missing account file**: If `.msal-account.json` is missing, extract the account ID from `.msal-cache.json` (look for `home_account_id`) and create it:
+   ```json
+   {"accountId":"your-home-account-id-here"}
+   ```
+3. **Wrong working directory**: Ensure `cwd` is set in `~/.claude.json`
+4. **Restart required**: Restart Claude Code after authentication
+5. **Wrong TOKEN_STORAGE**: Ensure `TOKEN_STORAGE=msal` in config
 
 ### "Client is public" error (AADSTS700025)
 
@@ -192,8 +199,8 @@ This file is located in the ms-graph directory and is gitignored.
 **Fix**:
 1. Azure Portal → App registration → Authentication
 2. Set "Allow public client flows" to **No**
-3. Clear token cache: `rm .tokens.json .msal-cache.json .msal-account.json`
-4. Re-authenticate: `node manual-auth.mjs`
+3. Clear token cache: `rm .msal-cache.json .msal-account.json`
+4. Re-authenticate: `node simple-auth.mjs` (use incognito browser)
 
 ### "Invalid client secret" error
 
@@ -269,7 +276,7 @@ kill -9 <pid-from-above>
 
 ## Re-authentication
 
-If tokens expire, get corrupted, or you need to change accounts:
+If tokens get corrupted or you need to change accounts:
 
 1. **Delete existing tokens**:
    ```bash
@@ -277,12 +284,20 @@ If tokens expire, get corrupted, or you need to change accounts:
    rm .msal-cache.json .msal-account.json
    ```
 
-2. **Run authentication**:
+2. **Run authentication** (use incognito browser):
    ```bash
-   node device-code-auth.mjs
+   node simple-auth.mjs
    ```
 
-3. **Restart Claude Code** to pick up new tokens
+3. **Create account file** if missing (extract `home_account_id` from `.msal-cache.json`):
+   ```bash
+   # Example - use actual ID from your cache file
+   echo '{"accountId":"your-home-account-id"}' > .msal-account.json
+   ```
+
+4. **Restart Claude Code** to pick up new tokens
+
+> **Note**: With MSAL storage, tokens auto-refresh so re-authentication is rarely needed.
 
 ---
 
@@ -319,8 +334,8 @@ This server only uses read permissions:
 
 ```bash
 cd C:/ai/mcp-servers/ms-graph
-node manual-auth.mjs
-# Then restart Claude Code
+node simple-auth.mjs
+# Open URL in incognito browser, then restart Claude Code
 ```
 
 ### Required Environment Variables
@@ -329,7 +344,7 @@ node manual-auth.mjs
 AZURE_CLIENT_ID      # From app registration Overview
 AZURE_TENANT_ID      # From app registration Overview
 AZURE_CLIENT_SECRET  # From Certificates & secrets (VALUE, not ID)
-TOKEN_STORAGE=file   # Use file-based token storage
+TOKEN_STORAGE=msal   # Use MSAL for automatic token refresh
 ```
 
 ### Required Azure Permissions

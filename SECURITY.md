@@ -1,4 +1,4 @@
-# Security Architecture - Toto MCP Server
+# Security Architecture - MS-Graph MCP Server
 
 **Last Updated:** 2025-11-17
 **Version:** 1.0.0
@@ -136,12 +136,12 @@ CSRF-protected OAuth 2.0 flow:
 
 **Location:** `src/auth/`
 
-Secure token storage with multiple backends:
+Secure token storage using MSAL (Microsoft Authentication Library):
 
-- **Windows:** Credential Manager via keytar (development)
-- **Production:** 1Password SDK (optional, future)
+- **MSAL Cache:** `.msal-cache.json` with automatic refresh via `acquireTokenSilent()`
+- **Account Storage:** `.msal-account.json` for account ID persistence
 - **In-Memory:** Never stored in code or logs
-- **Automatic Refresh:** 5-minute buffer before expiry
+- **Automatic Refresh:** Tokens refreshed automatically when expired (~1 hour)
 
 **Test Coverage:** 21 tests across token manager tests
 
@@ -204,7 +204,7 @@ AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_SECRET=your-client-secret  # NEVER commit!
 
 # Token Storage (REQUIRED)
-TOKEN_STORAGE=keytar  # or "1password"
+TOKEN_STORAGE=msal  # MSAL cache with automatic refresh
 
 # Optional Security Settings
 LOG_LEVEL=info  # error|warn|info|debug
@@ -218,7 +218,8 @@ Before deploying to production:
 
 - [ ] All environment variables set
 - [ ] `AZURE_CLIENT_SECRET` stored securely (not in .env file)
-- [ ] Token storage configured (keytar or 1Password)
+- [ ] Token storage configured (`TOKEN_STORAGE=msal`)
+- [ ] MSAL cache files created (`.msal-cache.json`, `.msal-account.json`)
 - [ ] Log level set appropriately (`info` or `warn` for production)
 - [ ] Rate limits configured for expected load
 - [ ] npm audit shows 0 vulnerabilities

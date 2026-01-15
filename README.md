@@ -67,7 +67,7 @@ AZURE_CLIENT_ID=your-application-client-id
 AZURE_TENANT_ID=your-directory-tenant-id
 AZURE_CLIENT_SECRET=your-client-secret-value
 AZURE_REDIRECT_URI=http://localhost:3000/callback
-TOKEN_STORAGE=file
+TOKEN_STORAGE=msal
 LOG_LEVEL=info
 ```
 
@@ -76,10 +76,10 @@ Or configure in `~/.claude.json` (see [AUTH.md](./AUTH.md#configuration) for det
 ### Step 4: Authenticate
 
 ```bash
-node manual-auth.mjs
+node simple-auth.mjs
 ```
 
-Open the URL displayed, sign in with your Microsoft account, and grant permissions.
+Open the URL displayed in an **incognito/private browser window**, sign in with your Microsoft account, and grant permissions. The script saves tokens to MSAL cache files for automatic refresh.
 
 ### Step 5: Configure Claude Code
 
@@ -97,7 +97,7 @@ Add to `~/.claude.json`:
         "AZURE_TENANT_ID": "your-tenant-id",
         "AZURE_CLIENT_SECRET": "your-secret-value",
         "AZURE_REDIRECT_URI": "http://localhost:3000/callback",
-        "TOKEN_STORAGE": "file",
+        "TOKEN_STORAGE": "msal",
         "LOG_LEVEL": "info"
       },
       "cwd": "C:/ai/mcp-servers/ms-graph"
@@ -134,7 +134,7 @@ Topics covered:
 | `AZURE_TENANT_ID` | Yes | - | Directory (tenant) ID from Azure |
 | `AZURE_CLIENT_SECRET` | Yes | - | Client secret VALUE from Azure |
 | `AZURE_REDIRECT_URI` | No | `http://localhost:3000/callback` | OAuth callback URL |
-| `TOKEN_STORAGE` | No | `file` | Token storage backend (`file`) |
+| `TOKEN_STORAGE` | No | `msal` | Token storage backend (`msal` recommended for auto-refresh) |
 | `LOG_LEVEL` | No | `info` | Logging level (`error`, `warn`, `info`, `debug`) |
 | `RATE_LIMIT_PER_MINUTE` | No | `60` | Microsoft Graph API rate limit |
 
@@ -170,7 +170,7 @@ ms-graph/
 │   │   └── calendar-service.ts      # Calendar business logic
 │   ├── mcp/               # MCP server implementation
 │   └── security/          # Security primitives
-├── manual-auth.mjs        # OAuth callback authentication script (recommended)
+├── simple-auth.mjs        # MSAL OAuth authentication script (recommended)
 ├── AUTH.md                # Authentication guide
 ├── SECURITY.md            # Security documentation
 └── README.md              # This file
@@ -207,7 +207,7 @@ For authentication issues, see **[AUTH.md - Troubleshooting](./AUTH.md#troublesh
 
 | Problem | Solution |
 |---------|----------|
-| "Not authenticated" | Run `node manual-auth.mjs` and restart Claude Code |
+| "Not authenticated" | Run `node simple-auth.mjs` and restart Claude Code |
 | "Invalid client secret" | Use secret VALUE (not ID); check for Windows env var override |
 | "Client is public" error | Set "Allow public client flows" to **No** in Azure |
 | Rate limit errors | Default is 60 req/min; check for loops in prompts |
